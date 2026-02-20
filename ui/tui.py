@@ -7,6 +7,7 @@ from textual.containers import Horizontal, Vertical, ScrollableContainer, Contai
 from textual.widgets import Button, Label, Static, Select
 from textual.reactive import reactive
 from audio.engine import AudioTrack
+from audio.mixer import Mixer
 
 # --- Device Options Initialization ---
 try:
@@ -32,10 +33,13 @@ class TrackWidget(Static):
     volume_lvl = reactive(7)
     is_muted = reactive(False)
     is_soloed = reactive(False)
+    playhead_idx = reactive(-1)
 
     def __init__(self):
         super().__init__()
         self.audio_track = AudioTrack()
+        self.last_top = ""
+        self.last_bot = ""
 
     def get_bar(self, level) -> str:
         return "█" * level + "░" * (10 - level)
@@ -74,41 +78,61 @@ class TrackWidget(Static):
     # --- Update Waveform Visualization ---
     def update_waveform(self):
         try:
-            path = self.audio_track.audio_file
-            if os.path.exists(path) and os.path.getsize(path) > 100:
-                import soundfile as sf
+            data = self.audio_track.data
+            if data is None:
+                return
 
-                data, _ = sf.read(path)
-                if data.ndim > 1:
-                    data = data[:, 0]
+            width = 55
+            window_samples = 44100 * 30
+            samples_per_char = window_samples // width
 
-                width = 55
-                chunks = np.array_split(data, width)
+            filled_chars = min(width, len(data) // samples_per_char)
 
-                chars_up = [" ", " ", "▂", "▃", "▄", "▅", "▆", "▇", "█"]
-                chars_down = [" ", " ", "▔", "🬇", "🬆", "🬅", "🬄", "🬃", "🬂", "▀"]
+            chars_up = ["_", "▂", "▂", "▃", "▄", "▅", "▆", "▇", "█"]
+            chars_down = [" ", "▔", "▔", "🬇", "🬆", "🬅", "🬄", "🬃", "🬂", "▀"]
 
-                top_str = ""
-                bot_str = ""
+            top_str = ""
+            bot_str = ""
 
-                for c in chunks:
-                    amp = np.max(np.abs(c)) if len(c) > 0 else 0
-                    if amp < 0.001:
-                        top_str += " "
-                        bot_str += " "
-                    else:
-                        idx = int(amp * 250)
-                        top_str += chars_up[min(idx, len(chars_up) - 1)]
-                        bot_str += chars_down[min(idx, len(chars_down) - 1)]
+            for i in range(width):
+                if i < filled_chars:
+                    start = i * samples_per_char
+                    end = (i + 1) * samples_per_char
+                    chunk = data[start:end]
+                    amp = np.max(np.abs(chunk)) if len(chunk) > 0 else 0
+                    idx = int(amp * 200)
+                    top_str += chars_up[min(idx, len(chars_up) - 1)]
+                    bot_str += chars_down[min(idx, len(chars_down) - 1)]
+                else:
+                    top_str += " "
+                    bot_str += " "
 
-                self.query_one("#wave-top").update(top_str)
-                self.query_one("#wave-bottom").update(bot_str)
+            self.last_top = top_str
+            self.last_bot = bot_str
+            self.query_one("#wave-top").update(top_str)
+            self.query_one("#wave-bottom").update(bot_str)
         except:
             pass
+
+    def watch_playhead_idx(self, idx: int):
+        if not self.last_top:
+            return
+
+        t = list(self.last_top)
+        b = list(self.last_bot)
+
+        if 0 <= idx < len(t):
+            t[idx] = "[bold yellow]█[/]"
+            b[idx] = "[bold yellow]█[/]"
+
+        self.query_one("#wave-top").update("".join(t))
+        self.query_one("#wave-bottom").update("".join(b))
 
     # --- Handle Track Button Events ---
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "btn-close":
+            if self.audio_track in self.app.mixer.tracks:
+                self.app.mixer.tracks.remove(self.audio_track)
             self.audio_track.cleanup()
             self.remove()
         elif event.button.id == "btn-rec":
@@ -152,7 +176,9 @@ class TrackWidget(Static):
         self.is_recording = False
         self.app.stop_timer()
         self.remove_class("active-rec")
-        self.set_timer(0.5, self.update_waveform)
+        if self.audio_track not in self.app.mixer.tracks:
+            self.app.mixer.tracks.append(self.audio_track)
+        self.update_waveform()
 
     # --- Handle Input Device Selection ---
     def on_select_changed(self, event: Select.Changed) -> None:
@@ -165,6 +191,7 @@ class Tuidio(App):
     master_volume = reactive(7)
     selected_output = reactive(None)
     time_display = reactive("00:00:00")
+    bpm = reactive(120)
 
     # --- Application CSS Styles ---
     CSS = """
@@ -172,8 +199,10 @@ class Tuidio(App):
     #app-container { border: solid #222; height: 100%; layout: vertical; }
     #top-bar { height: 3; border-bottom: solid #222; layout: horizontal; align: left middle; padding: 0 1; }
     .btn-text { min-width: 4; height: 1; border: none; background: transparent; color: #eee; }
+    .btn-mini { min-width: 3; height: 1; border: none; background: #222; margin: 0 1; }
     .label-out { margin-left: 2; color: #555; }
     #clock { color: #0f0; margin-left: 2; text-style: bold; width: 12; }
+    .metronome-on { color: #0ff; }
 
     Select { background: #111; border: none; height: 1; color: white; }
     Select > SelectCurrent { border: none; background: transparent; height: 1; }
@@ -220,6 +249,10 @@ class Tuidio(App):
     .track-solo #btn-solo { color: yellow; }
     """
 
+    def __init__(self):
+        super().__init__()
+        self.mixer = Mixer()
+
     # --- Compose Main Application UI ---
     def compose(self) -> ComposeResult:
         with Container(id="app-container"):
@@ -228,6 +261,11 @@ class Tuidio(App):
                 yield Label(" | ")
                 yield Button("▶", id="all-play", classes="btn-text")
                 yield Button("■", id="all-stop", classes="btn-text")
+                yield Button("󰓟", id="btn-metronome", classes="btn-text")
+                yield Label(" BPM:")
+                yield Button("-", id="bpm-down", classes="btn-mini")
+                yield Label(str(self.bpm), id="bpm-display")
+                yield Button("+", id="bpm-up", classes="btn-mini")
                 yield Label(" Out:", classes="label-out")
                 yield Select(
                     options=OUTPUT_OPTS, prompt="Output Device", id="output-select"
@@ -247,6 +285,24 @@ class Tuidio(App):
                         )
                         yield Button("+", id="m-vol-up", classes="btn-text")
 
+    def on_mount(self):
+        self.set_interval(0.1, self.sync_ui)
+
+    def sync_ui(self):
+        if self.mixer.is_playing:
+            elapsed = self.mixer.current_sample / self.mixer.fs
+            mins, secs = divmod(int(elapsed), 60)
+            msecs = int((elapsed % 1) * 100)
+            self.query_one("#clock").update(f"{mins:02}:{secs:02}:{msecs:02}")
+
+            idx = int((self.mixer.current_sample / (self.mixer.fs * 30)) * 55)
+            for tw in self.query(TrackWidget):
+                tw.playhead_idx = idx
+
+        for tw in self.query(TrackWidget):
+            if tw.is_recording:
+                tw.update_waveform()
+
     # --- Volume Bar Helper ---
     def get_bar(self, level):
         return "█" * level + "░" * (10 - level)
@@ -255,8 +311,7 @@ class Tuidio(App):
     def start_timer(self):
         self.start_rec_time = time.time()
         self.timer_active = True
-        if not hasattr(self, "clock_timer"):
-            self.clock_timer = self.set_interval(0.1, self.update_clock)
+        self.set_interval(0.1, self.update_clock)
 
     # --- Stop Recording Timer ---
     def stop_timer(self):
@@ -264,7 +319,7 @@ class Tuidio(App):
 
     # --- Update Recording Clock ---
     def update_clock(self):
-        if hasattr(self, "timer_active") and self.timer_active:
+        if getattr(self, "timer_active", False):
             elapsed = time.time() - self.start_rec_time
             mins, secs = divmod(int(elapsed), 60)
             msecs = int((elapsed % 1) * 100)
@@ -274,24 +329,34 @@ class Tuidio(App):
     # --- Handle Main App Button Events ---
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "add-track":
-            self.query_one("#arranger-scroll").mount(TrackWidget())
+            new_track = TrackWidget()
+            self.query_one("#arranger-scroll").mount(new_track)
+        elif event.button.id == "btn-metronome":
+            self.mixer.metronome_enabled = not self.mixer.metronome_enabled
+            event.button.toggle_class("metronome-on")
+        elif "bpm" in event.button.id:
+            self.bpm = max(
+                40, min(240, self.bpm + (5 if "up" in event.button.id else -5))
+            )
+            self.mixer.bpm = self.bpm
+            self.query_one("#bpm-display").update(str(self.bpm))
         elif "m-vol" in event.button.id:
             self.master_volume = min(
                 10, max(0, self.master_volume + (1 if "up" in event.button.id else -1))
             )
             self.query_one("#m-vol-display").update(self.get_bar(self.master_volume))
         elif event.button.id == "all-play":
-            tracks = list(self.query(TrackWidget))
-            any_solo = any(t.is_soloed for t in tracks)
-            for tw in tracks:
-                if (any_solo and tw.is_soloed) or (not any_solo and not tw.is_muted):
-                    tw.audio_track.output_device = self.selected_output
-                    tw.audio_track.play(master_vol=self.master_volume / 10)
+            self.mixer.output_device = self.selected_output
+            self.mixer.start()
         elif event.button.id == "all-stop":
-            sd.stop()
+            self.mixer.stop()
             self.stop_timer()
+            for tw in self.query(TrackWidget):
+                tw.playhead_idx = -1
+                tw.update_waveform()
 
     # --- Handle Output Device Selection ---
     def on_select_changed(self, event: Select.Changed) -> None:
         if event.select.id == "output-select":
             self.selected_output = event.value
+            self.mixer.output_device = event.value

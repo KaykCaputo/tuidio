@@ -30,6 +30,8 @@ class AudioTrack:
         self.is_soloed = False
         self.start_time = 0
         self.q = queue.Queue()
+        self.data = None
+        self._live_list = []
 
     # --- Set Input Device and Update Audio Parameters ---
     def set_input_device(self, idx):
@@ -49,6 +51,8 @@ class AudioTrack:
             return
         self.is_recording = True
         self.start_time = time.time()
+        self._live_list = []
+        self.data = None
         while not self.q.empty():
             self.q.get()
 
@@ -74,6 +78,9 @@ class AudioTrack:
                             try:
                                 data = self.q.get(timeout=0.2)
                                 f.write(data)
+                                mono = data[:, 0] if data.ndim > 1 else data
+                                self._live_list.append(mono)
+                                self.data = np.concatenate(self._live_list)
                             except queue.Empty:
                                 continue
             except:
@@ -84,20 +91,38 @@ class AudioTrack:
     # --- Stop Recording Audio ---
     def stop_recording(self):
         self.is_recording = False
+        time.sleep(0.2)
+        if os.path.exists(self.audio_file):
+            self.data, _ = sf.read(self.audio_file)
+            if self.data.ndim > 1:
+                self.data = self.data[:, 0]
+
+    def get_audio_chunk(self, start_sample, num_frames):
+        if self.data is None:
+            return None
+
+        end_sample = start_sample + num_frames
+        if start_sample >= len(self.data):
+            return None
+
+        chunk = self.data[start_sample : min(end_sample, len(self.data))]
+        if len(chunk) < num_frames:
+            padding = np.zeros(num_frames - len(chunk))
+            chunk = np.concatenate([chunk, padding])
+        return chunk
 
     # --- Play Recorded Audio ---
     def play(self, master_vol=1.0):
-        if (
-            not os.path.exists(self.audio_file)
-            or os.path.getsize(self.audio_file) < 100
-        ):
+        if self.data is None:
             return
 
         def _task():
             try:
-                data, fs = sf.read(self.audio_file)
-                data = data * self.volume * master_vol
-                sd.play(data, fs, device=self.output_device)
+                sd.play(
+                    self.data * self.volume * master_vol,
+                    self.fs,
+                    device=self.output_device,
+                )
                 sd.wait()
             except:
                 pass

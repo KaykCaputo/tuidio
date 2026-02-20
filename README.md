@@ -19,26 +19,31 @@ Currently, it allows for multi-track recording directly via the terminal.
 ## Roadmap
 
 ### 1. Sync and Timeline
-- [ ] **Timing Engine:** BPM to audio sample conversion for mathematical precision.
-- [ ] **Metronome:** Synchronized audio clicks and visual beat tracking.
-- [ ] **Playhead:** A real-time moving cursor indicating playback position.
+
+- [x] **Timing Engine:** BPM to audio sample conversion for mathematical precision.
+- [x] **Metronome:** Synchronized audio clicks and visual beat tracking.
+- [x] **Playhead:** A real-time moving cursor indicating playback position.
 
 ### 2. Clips and Recording
+
 - [ ] **Multitrack Engine:** Overdubbing support (record while listening to existing tracks).
 - [ ] **Clip System:** Non-destructive editing using metadata (start point, offset, and duration).
 
 ### 3. Audio Editing
+
 - [ ] **Snapping:** Automatic alignment of clips to the metronome grid.
 - [ ] **Editing Commands:** Keyboard shortcuts for:
-    - **Split:** Slice clips at specific points.
-    - **Move:** Shift clips across the timeline or between tracks.
-    - **Delete:** Remove clips from the session.
+  - **Split:** Slice clips at specific points.
+  - **Move:** Shift clips across the timeline or between tracks.
+  - **Delete:** Remove clips from the session.
 
 ### 4. Persistence and Output
+
 - [ ] **Project Save/Load:** Session data stored in lightweight `.tuidio` (JSON) files.
 - [ ] **Mixdown (Export):** Render all tracks into a final master `.wav` file.
 
 ### 5. Low-End Optimization
+
 - [ ] **Latency Compensation:** Automatic adjustment for hardware I/O delay.
 - [ ] **Priority Multithreading:** Isolated threads for Audio (Real-time priority) and Interface (Low priority).
 
@@ -53,12 +58,14 @@ Currently, it allows for multi-track recording directly via the terminal.
 ## Installation
 
 1. **Clone the repository:**
+
    ```bash
    git clone <repo-url>
    cd tuidio
    ```
 
 2. **Create a virtual environment (Recommended):**
+
    ```bash
    python3 -m venv .venv
    source .venv/bin/activate
@@ -72,6 +79,7 @@ Currently, it allows for multi-track recording directly via the terminal.
 ## How to Run
 
 Start the application with:
+
 ```bash
 python tuidio.py
 ```
@@ -80,7 +88,8 @@ python tuidio.py
 
 ## License
 
-This project is licensed under the [MIT License](LICENSE).  
-  
-  ---
+This project is licensed under the [MIT License](LICENSE).
+
+---
+
 > **Tuidio** = **TUI** + **Audio** (or **TUI** + **Studio**... you decide)
