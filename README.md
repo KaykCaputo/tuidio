@@ -44,6 +44,10 @@ python tuidio.py
 
 MIT
 
+## Screenshot
+
+![Tuidio Demo](screenshots/tuidiodemonstration.png)
+
 ---
 
 Tuidio = TUI + Audio or TUI + Studio you decide hehe
