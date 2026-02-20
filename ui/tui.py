@@ -144,7 +144,7 @@ class TrackWidget(Static):
             else:
                 self.stop_and_update()
         elif event.button.id == "btn-stop":
-            self.stop_and_update()
+            self.app.stop_all()
         elif event.button.id == "btn-mute":
             self.is_muted = not self.is_muted
             self.audio_track.is_muted = self.is_muted
@@ -160,8 +160,7 @@ class TrackWidget(Static):
             else:
                 self.remove_class("track-solo")
         elif event.button.id == "btn-play":
-            self.audio_track.output_device = self.app.selected_output
-            self.audio_track.play(master_vol=self.app.master_volume / 10)
+            self.app.play_track_solo(self)
         elif "vol" in event.button.id:
             self.volume_lvl = min(
                 10, max(0, self.volume_lvl + (1 if "up" in event.button.id else -1))
@@ -171,7 +170,6 @@ class TrackWidget(Static):
 
     # --- Stop Recording and Update UI ---
     def stop_and_update(self):
-        sd.stop()
         self.audio_track.stop_recording()
         self.is_recording = False
         self.app.stop_timer()
@@ -202,7 +200,7 @@ class Tuidio(App):
     .btn-mini { min-width: 3; height: 1; border: none; background: #222; margin: 0 1; }
     .label-out { margin-left: 2; color: #555; }
     #clock { color: #0f0; margin-left: 2; text-style: bold; width: 12; }
-    .metronome-on { color: #0ff; }
+    .metronome-on { color: #0ff !important; }
 
     Select { background: #111; border: none; height: 1; color: white; }
     Select > SelectCurrent { border: none; background: transparent; height: 1; }
@@ -303,6 +301,19 @@ class Tuidio(App):
             if tw.is_recording:
                 tw.update_waveform()
 
+    def play_track_solo(self, track_widget):
+        for tw in self.query(TrackWidget):
+            tw.audio_track.is_soloed = False
+        track_widget.audio_track.is_soloed = True
+        self.mixer.start_transport()
+
+    def stop_all(self):
+        self.mixer.stop_transport()
+        self.stop_timer()
+        for tw in self.query(TrackWidget):
+            tw.playhead_idx = -1
+            tw.update_waveform()
+
     # --- Volume Bar Helper ---
     def get_bar(self, level):
         return "█" * level + "░" * (10 - level)
@@ -334,6 +345,8 @@ class Tuidio(App):
         elif event.button.id == "btn-metronome":
             self.mixer.metronome_enabled = not self.mixer.metronome_enabled
             event.button.toggle_class("metronome-on")
+            if self.mixer.metronome_enabled:
+                self.mixer.ensure_stream()
         elif "bpm" in event.button.id:
             self.bpm = max(
                 40, min(240, self.bpm + (5 if "up" in event.button.id else -5))
@@ -346,17 +359,15 @@ class Tuidio(App):
             )
             self.query_one("#m-vol-display").update(self.get_bar(self.master_volume))
         elif event.button.id == "all-play":
-            self.mixer.output_device = self.selected_output
-            self.mixer.start()
-        elif event.button.id == "all-stop":
-            self.mixer.stop()
-            self.stop_timer()
+            self.mixer.tracks = [tw.audio_track for tw in self.query(TrackWidget)]
             for tw in self.query(TrackWidget):
-                tw.playhead_idx = -1
-                tw.update_waveform()
+                tw.audio_track.is_soloed = False
+            self.mixer.start_transport()
+        elif event.button.id == "all-stop":
+            self.stop_all()
 
     # --- Handle Output Device Selection ---
     def on_select_changed(self, event: Select.Changed) -> None:
         if event.select.id == "output-select":
-            self.selected_output = event.value
-            self.mixer.output_device = event.value
+            self.selected_output = self.mixer.output_device = event.value
+            self.mixer.ensure_stream()

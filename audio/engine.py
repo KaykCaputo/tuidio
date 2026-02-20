@@ -111,23 +111,9 @@ class AudioTrack:
             chunk = np.concatenate([chunk, padding])
         return chunk
 
-    # --- Play Recorded Audio ---
     def play(self, master_vol=1.0):
         if self.data is None:
             return
-
-        def _task():
-            try:
-                sd.play(
-                    self.data * self.volume * master_vol,
-                    self.fs,
-                    device=self.output_device,
-                )
-                sd.wait()
-            except:
-                pass
-
-        threading.Thread(target=_task, daemon=True).start()
 
     # --- Cleanup Temporary Audio File ---
     def cleanup(self):
