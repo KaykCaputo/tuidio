@@ -6,7 +6,7 @@ from textual.app import App, ComposeResult
 from textual.containers import Horizontal, Vertical, ScrollableContainer, Container
 from textual.widgets import Button, Label, Static, Select
 from textual.reactive import reactive
-from daw import AudioTrack
+from audio.engine import AudioTrack
 
 # --- Device Options Initialization ---
 try:
@@ -295,8 +295,3 @@ class Tuidio(App):
     def on_select_changed(self, event: Select.Changed) -> None:
         if event.select.id == "output-select":
             self.selected_output = event.value
-
-
-# --- Application Entry Point ---
-if __name__ == "__main__":
-    Tuidio().run()
