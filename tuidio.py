@@ -8,6 +8,7 @@ from textual.widgets import Button, Label, Static, Select
 from textual.reactive import reactive
 from daw import AudioTrack
 
+# --- Device Options Initialization ---
 try:
     ALL_DEVICES = sd.query_devices()
     INPUT_OPTS = [
@@ -25,6 +26,7 @@ except:
     OUTPUT_OPTS = [("Default", 0)]
 
 
+## --- Track Widget (Single Track UI) ---
 class TrackWidget(Static):
     is_recording = reactive(False)
     volume_lvl = reactive(7)
@@ -38,6 +40,7 @@ class TrackWidget(Static):
     def get_bar(self, level) -> str:
         return "█" * level + "░" * (10 - level)
 
+    # --- Compose Track Widget UI ---
     def compose(self) -> ComposeResult:
         with Horizontal(classes="track-card"):
             with Vertical(classes="track-sidebar"):
@@ -68,6 +71,7 @@ class TrackWidget(Static):
                 yield Label(" ", id="wave-top", classes="wave-line top")
                 yield Label(" ", id="wave-bottom", classes="wave-line bot")
 
+    # --- Update Waveform Visualization ---
     def update_waveform(self):
         try:
             path = self.audio_track.audio_file
@@ -102,6 +106,7 @@ class TrackWidget(Static):
         except:
             pass
 
+    # --- Handle Track Button Events ---
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "btn-close":
             self.audio_track.cleanup()
@@ -140,6 +145,7 @@ class TrackWidget(Static):
             self.audio_track.volume = self.volume_lvl / 10
             self.query_one("#vol-display").update(self.get_bar(self.volume_lvl))
 
+    # --- Stop Recording and Update UI ---
     def stop_and_update(self):
         sd.stop()
         self.audio_track.stop_recording()
@@ -148,16 +154,19 @@ class TrackWidget(Static):
         self.remove_class("active-rec")
         self.set_timer(0.5, self.update_waveform)
 
+    # --- Handle Input Device Selection ---
     def on_select_changed(self, event: Select.Changed) -> None:
         if event.select.id == "input-select":
             self.audio_track.set_input_device(event.value)
 
 
+## --- Main Application Class ---
 class Tuidio(App):
     master_volume = reactive(7)
     selected_output = reactive(None)
     time_display = reactive("00:00:00")
 
+    # --- Application CSS Styles ---
     CSS = """
     Screen { background: black; color: #aaa; }
     #app-container { border: solid #222; height: 100%; layout: vertical; }
@@ -211,6 +220,7 @@ class Tuidio(App):
     .track-solo #btn-solo { color: yellow; }
     """
 
+    # --- Compose Main Application UI ---
     def compose(self) -> ComposeResult:
         with Container(id="app-container"):
             with Horizontal(id="top-bar"):
@@ -237,18 +247,22 @@ class Tuidio(App):
                         )
                         yield Button("+", id="m-vol-up", classes="btn-text")
 
+    # --- Volume Bar Helper ---
     def get_bar(self, level):
         return "█" * level + "░" * (10 - level)
 
+    # --- Start Recording Timer ---
     def start_timer(self):
         self.start_rec_time = time.time()
         self.timer_active = True
         if not hasattr(self, "clock_timer"):
             self.clock_timer = self.set_interval(0.1, self.update_clock)
 
+    # --- Stop Recording Timer ---
     def stop_timer(self):
         self.timer_active = False
 
+    # --- Update Recording Clock ---
     def update_clock(self):
         if hasattr(self, "timer_active") and self.timer_active:
             elapsed = time.time() - self.start_rec_time
@@ -257,6 +271,7 @@ class Tuidio(App):
             self.time_display = f"{mins:02}:{secs:02}:{msecs:02}"
             self.query_one("#clock").update(self.time_display)
 
+    # --- Handle Main App Button Events ---
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "add-track":
             self.query_one("#arranger-scroll").mount(TrackWidget())
@@ -276,10 +291,12 @@ class Tuidio(App):
             sd.stop()
             self.stop_timer()
 
+    # --- Handle Output Device Selection ---
     def on_select_changed(self, event: Select.Changed) -> None:
         if event.select.id == "output-select":
             self.selected_output = event.value
 
 
+# --- Application Entry Point ---
 if __name__ == "__main__":
     Tuidio().run()

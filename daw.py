@@ -8,11 +8,14 @@ import numpy as np
 import time
 import sys
 
+# --- Linux Audio Backend Configuration ---
 if sys.platform.startswith("linux"):
     os.environ["SD_API"] = "alsa"
 
 
+## --- AudioTrack: Handles Audio Recording and Playback ---
 class AudioTrack:
+    # --- Initialize AudioTrack State ---
     def __init__(self):
         self.input_device = None
         self.output_device = None
@@ -28,6 +31,7 @@ class AudioTrack:
         self.start_time = 0
         self.q = queue.Queue()
 
+    # --- Set Input Device and Update Audio Parameters ---
     def set_input_device(self, idx):
         try:
             if idx is None:
@@ -39,6 +43,7 @@ class AudioTrack:
         except:
             self.fs = 44100
 
+    # --- Start Recording Audio ---
     def record(self):
         if self.is_recording:
             return
@@ -76,9 +81,11 @@ class AudioTrack:
 
         threading.Thread(target=_task, daemon=True).start()
 
+    # --- Stop Recording Audio ---
     def stop_recording(self):
         self.is_recording = False
 
+    # --- Play Recorded Audio ---
     def play(self, master_vol=1.0):
         if (
             not os.path.exists(self.audio_file)
@@ -97,6 +104,7 @@ class AudioTrack:
 
         threading.Thread(target=_task, daemon=True).start()
 
+    # --- Cleanup Temporary Audio File ---
     def cleanup(self):
         self.is_recording = False
         try:
