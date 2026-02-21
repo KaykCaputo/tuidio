@@ -6,9 +6,12 @@ Currently, it allows for multi-track recording directly via the terminal.
 
 ---
 
-## Screenshot
+## Demonstration
 
-![Tuidio Demo](screenshots/tuidiodemonstration.png)
+<p align="center">
+  <img src="screenshots/testtuidio2.gif" height="100" style="display:inline-block; margin-right:10px;">
+  <img src="screenshots/tuidiodemonstration.png" height="100" style="display:inline-block;">
+</p>
 
 ## Features
 
